@@ -72,7 +72,9 @@ class Bird(pg.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.center = xy
         self.speed = 10
-
+        self.state = "normal"
+        self.hyper_life = 0
+        
     def change_img(self, num: int, screen: pg.Surface):
         """
         こうかとん画像を切り替え，画面に転送する
@@ -81,25 +83,48 @@ class Bird(pg.sprite.Sprite):
         """
         self.image = pg.transform.rotozoom(pg.image.load(f"fig/{num}.png"), 0, 0.9)
         screen.blit(self.image, self.rect)
+    
+    def activate_hyper(self):
+            self.state = "hyper"
+            self.hyper_life = 500
 
     def update(self, key_lst: list[bool], screen: pg.Surface):
-        """
-        押下キーに応じてこうかとんを移動させる
-        引数1 key_lst：押下キーの真理値リスト
-        引数2 screen：画面Surface
-        """
+        # --- 移動処理 ---
         sum_mv = [0, 0]
         for k, mv in __class__.delta.items():
             if key_lst[k]:
                 sum_mv[0] += mv[0]
                 sum_mv[1] += mv[1]
-        self.rect.move_ip(self.speed*sum_mv[0], self.speed*sum_mv[1])
+
+        self.rect.move_ip(self.speed * sum_mv[0], self.speed * sum_mv[1])
+
         if check_bound(self.rect) != (True, True):
-            self.rect.move_ip(-self.speed*sum_mv[0], -self.speed*sum_mv[1])
-        if not (sum_mv[0] == 0 and sum_mv[1] == 0):
+            self.rect.move_ip(-self.speed * sum_mv[0], -self.speed * sum_mv[1])
+
+        # 向き変更（ここで画像が切り替わる）
+        if sum_mv != [0, 0]:
             self.dire = tuple(sum_mv)
             self.image = self.imgs[self.dire]
+
+        # --- Hyper mode handling ---
+        if self.state == "hyper":
+            # 画像変換（laplacian）
+            self.image = pg.transform.laplacian(self.image)
+
+        
+            self.image.set_alpha(100)  
+
+            self.hyper_life -= 1
+            if self.hyper_life < 0:
+                self.state = "normal"
+
+        else:
+            # 通常時は不透明
+            self.image.set_alpha(255)
+
         screen.blit(self.image, self.rect)
+                
+        
 
 
 class Bomb(pg.sprite.Sprite):
@@ -342,6 +367,11 @@ def main():
     clock = pg.time.Clock()
     while True:
         key_lst = pg.key.get_pressed()
+                # --- Hyper発動処理 ---
+        if key_lst[pg.K_RSHIFT] and score.value > 100 and bird.state == "normal":
+            bird.activate_hyper()
+            score.value -= 100    
+
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 return 0
@@ -392,11 +422,19 @@ def main():
                 score.value += 10
 
         for bomb in pg.sprite.spritecollide(bird, bombs, True):  # こうかとんと衝突した爆弾リスト
-            bird.change_img(8, screen)  # こうかとん悲しみエフェクト
-            score.update(screen)
-            pg.display.update()
-            time.sleep(2)
-            return
+            if bird.state == "hyper":
+                exps.add(Explosion(bomb, 50))
+                score.value += 1
+            else:
+            # 通常時はゲームオーバー
+                bird.change_img(8, screen)
+                score.update(screen)
+                pg.display.update()
+                time.sleep(2)
+                return
+        if key_lst[pg.K_RSHIFT] and score.value > 100:
+            bird.activate_hyper()
+            score.value -= 100
 
         bird.update(key_lst, screen)
         beams.update()
