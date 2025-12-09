@@ -223,6 +223,63 @@ class Enemy(pg.sprite.Sprite):
         self.rect.move_ip(self.vx, self.vy)
 
 
+class Shield(pg.sprite.Sprite):
+    """
+    防御壁に関するクラス
+    """
+    
+    def __init__(self, bird: Bird, life: int = 400):
+        """
+        防御壁画像Surfaceを生成する
+        引数 bird：防御壁を展開するこうかとん
+        引数 life：防御壁の持続時間
+        """
+        super().__init__()
+
+        
+        # 幅、高さを指定した空のSurfaceを生成する
+        width = 20
+        height = bird.rect.height * 2
+        self.image = pg.Surface((width, height))
+        
+        # 青い矩形を作成する
+        pg.draw.rect(self.image, (0, 0, 255), (0, 0, width, height))
+        self.image.set_colorkey((0, 0, 0)) # 黒を透明色にする
+        self.rect = self.image.get_rect()
+        
+        # こうかとんの向きを取得
+        vx, vy = bird.dire
+        # こうかとんの向きを求める
+        angle = math.degrees(math.atan2(-vy, vx))
+        
+        # surfaceを回転させる
+        self.image = pg.transform.rotozoom(self.image, angle, 1.0)
+        self.rect = self.image.get_rect()
+        
+        # 適切な位置に配置する
+        # こうかとんの中心座標を求める
+        center_x, center_y = bird.rect.center
+        # こうかとんの画像サイズを求める
+        bird_size = bird.image.get_width()
+        # 進行方向と逆ベクトルを求める
+        # reverse_vx, reverse_vy = -vx, -vy
+        
+        # 配置座標を代入
+        self.rect.centerx = center_x + vx * bird_size
+        self.rect.centery = center_y + vy * bird_size
+        
+        self.life = life
+        
+        
+    def update(self, bird: Bird):
+        """
+        lifeを1減算
+        """
+        self.life -= 1
+        if self.life < 0:
+            self.kill()
+    
+
 class Score:
     """
     打ち落とした爆弾，敵機の数をスコアとして表示するクラス
@@ -253,6 +310,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    shields = pg.sprite.Group()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -263,6 +321,12 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+                
+            if event.type == pg.KEYDOWN and event.key == pg.K_s:
+                if score.value > 50 and len(shields) == 0:
+                    shields.add(Shield(bird))
+                    score.value -= 50
+                
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
@@ -281,6 +345,10 @@ def main():
         for bomb in pg.sprite.groupcollide(bombs, beams, True, True).keys():  # ビームと衝突した爆弾リスト
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
             score.value += 1  # 1点アップ
+        
+        # 防御壁と爆弾の衝突判定
+        for bomb in pg.sprite.groupcollide(bombs, shields, True, False).keys():
+            exps.add(Explosion(bomb, 50)) # 爆弾が破壊される爆発エフェクト
 
         for bomb in pg.sprite.spritecollide(bird, bombs, True):  # こうかとんと衝突した爆弾リスト
             bird.change_img(8, screen)  # こうかとん悲しみエフェクト
@@ -294,6 +362,8 @@ def main():
         beams.draw(screen)
         emys.update()
         emys.draw(screen)
+        shields.update(bird)
+        shields.draw(screen)
         bombs.update()
         bombs.draw(screen)
         exps.update()
